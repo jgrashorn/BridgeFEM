@@ -1,73 +1,71 @@
 ---
 layout: default
 title: Theory - BridgeFEM.jl
+description: Mathematical foundations of temperature-dependent finite element analysis
+toc: true
 ---
 
-# Theoretical Background
+# 📐 Theoretical Background
 
-This page describes the finite element formulation and model order reduction techniques used in BridgeFEM.jl.
+This page describes the mathematical foundations, finite element formulation, and model order reduction techniques used in BridgeFEM.jl.
 
-## Table of Contents
-- [Finite Element Method](#finite-element-method)
-- [2D Frame Elements](#2d-frame-elements)
-- [Temperature Dependence](#temperature-dependence)
-- [Support Modeling](#support-modeling)
-- [Modal Analysis](#modal-analysis)
-- [Model Order Reduction](#model-order-reduction)
-- [Dynamic Simulation](#dynamic-simulation)
+> **🎯 Key Topics**: Finite Element Method • Temperature-Dependent Materials • Modal Analysis • Model Order Reduction • Dynamic Simulation
 
 ---
 
-## Finite Element Method
+## 🔬 Finite Element Method
 
 ### Governing Equations
 
 For a structural system, the equations of motion in physical coordinates are:
 
-$$\mathbf{M}\ddot{\mathbf{u}} + \mathbf{C}\dot{\mathbf{u}} + \mathbf{K}(\mathbf{T})\mathbf{u} = \mathbf{f}(t)$$
+$$\boxed{\mathbf{M}\ddot{\mathbf{u}} + \mathbf{C}\dot{\mathbf{u}} + \mathbf{K}(T)\mathbf{u} = \mathbf{f}(t)}$$
 
-where:
-- $\mathbf{M}$ = mass matrix
-- $\mathbf{C}$ = damping matrix  
-- $\mathbf{K}(\mathbf{T})$ = temperature-dependent stiffness matrix
-- $\mathbf{u}$ = displacement vector
-- $\mathbf{f}(t)$ = external force vector
+**System Matrices:**
+- $\mathbf{M} \in \mathbb{R}^{n \times n}$ = global mass matrix
+- $\mathbf{C} \in \mathbb{R}^{n \times n}$ = damping matrix  
+- $\mathbf{K}(T) \in \mathbb{R}^{n \times n}$ = temperature-dependent stiffness matrix
+- $\mathbf{u}(t) \in \mathbb{R}^n$ = displacement vector
+- $\mathbf{f}(t) \in \mathbb{R}^n$ = external force vector
 
-### Discretization
+### Discretization Strategy
 
-The bridge is discretized using 2D frame elements with 3 degrees of freedom per node:
-- $u$ = horizontal displacement
-- $v$ = vertical displacement  
-- $\theta$ = rotation about z-axis
+The bridge structure is discretized using **2D frame elements** with 3 degrees of freedom per node:
 
-For $n$ elements with $n+1$ nodes, the total system size is $3(n+1)$ DOFs.
+$$\mathbf{u}_i = \begin{bmatrix} u_i \\ v_i \\ \theta_i \end{bmatrix} \quad \text{where} \quad \begin{cases}
+u_i & = \text{horizontal displacement} \\
+v_i & = \text{vertical displacement} \\
+\theta_i & = \text{rotation about z-axis}
+\end{cases}$$
+
+**System Size:** For $n$ elements with $n+1$ nodes → **Total DOFs = $3(n+1)$**
 
 ---
 
-## 2D Frame Elements
+## 🏗️ 2D Frame Elements
 
 ### Element Stiffness Matrix
 
-Each frame element has 6 DOFs (3 per node). The local element stiffness matrix is:
+Each frame element connects two nodes with 6 total DOFs. The **local element stiffness matrix** is:
 
 $$\mathbf{k}^e = \begin{bmatrix}
-\frac{EA}{L} & 0 & 0 & -\frac{EA}{L} & 0 & 0 \\
-0 & \frac{12EI}{L^3} & \frac{6EI}{L^2} & 0 & -\frac{12EI}{L^3} & \frac{6EI}{L^2} \\
-0 & \frac{6EI}{L^2} & \frac{4EI}{L} & 0 & -\frac{6EI}{L^2} & \frac{2EI}{L} \\
--\frac{EA}{L} & 0 & 0 & \frac{EA}{L} & 0 & 0 \\
-0 & -\frac{12EI}{L^3} & -\frac{6EI}{L^2} & 0 & \frac{12EI}{L^3} & -\frac{6EI}{L^2} \\
-0 & \frac{6EI}{L^2} & \frac{2EI}{L} & 0 & -\frac{6EI}{L^2} & \frac{4EI}{L}
+\dfrac{EA}{L} & 0 & 0 & -\dfrac{EA}{L} & 0 & 0 \\[0.3em]
+0 & \dfrac{12EI}{L^3} & \dfrac{6EI}{L^2} & 0 & -\dfrac{12EI}{L^3} & \dfrac{6EI}{L^2} \\[0.3em]
+0 & \dfrac{6EI}{L^2} & \dfrac{4EI}{L} & 0 & -\dfrac{6EI}{L^2} & \dfrac{2EI}{L} \\[0.3em]
+-\dfrac{EA}{L} & 0 & 0 & \dfrac{EA}{L} & 0 & 0 \\[0.3em]
+0 & -\dfrac{12EI}{L^3} & -\dfrac{6EI}{L^2} & 0 & \dfrac{12EI}{L^3} & -\dfrac{6EI}{L^2} \\[0.3em]
+0 & \dfrac{6EI}{L^2} & \dfrac{2EI}{L} & 0 & -\dfrac{6EI}{L^2} & \dfrac{4EI}{L}
 \end{bmatrix}$$
 
-where:
-- $E$ = Young's modulus
-- $A$ = cross-sectional area
-- $I$ = moment of inertia
-- $L$ = element length
+**Material and Geometric Parameters:**
+- $E(T)$ = Temperature-dependent Young's modulus [Pa]
+- $A$ = Cross-sectional area [m²]
+- $I$ = Second moment of inertia [m⁴]
+- $L$ = Element length [m]
 
 ### Element Mass Matrix
 
-The consistent mass matrix for a frame element is:
+The **consistent mass matrix** derived from Hermite interpolation functions:
 
 $$\mathbf{m}^e = \frac{\rho A L}{420} \begin{bmatrix}
 140 & 0 & 0 & 70 & 0 & 0 \\
@@ -78,9 +76,14 @@ $$\mathbf{m}^e = \frac{\rho A L}{420} \begin{bmatrix}
 0 & -13L & -3L^2 & 0 & -22L & 4L^2
 \end{bmatrix}$$
 
+**Properties:**
+- $\rho$ = Material density [kg/m³]
+- Preserves total element mass: $\int_0^L \rho A \, dx = \rho A L$
+- Couples translational and rotational inertia
+
 ### Assembly Process
 
-Global matrices are assembled using the standard finite element procedure:
+**Global matrix assembly** using standard FEM connectivity:
 
 ```julia
 function assemble_matrices(bridge, T)
@@ -88,14 +91,14 @@ function assemble_matrices(bridge, T)
     K = spzeros(n_dofs, n_dofs)
     
     for e = 1:n_elements
-        # Element matrices
+        # Temperature-dependent element matrices
         ke = frame_elem_stiffness(E(T)*A, E(T)*I, L_element)
         me = frame_elem_mass(ρ, A, L_element)
         
-        # DOF connectivity
-        dofs = element_dofs(e)
+        # DOF connectivity mapping
+        dofs = [3*(e-1)+1:3*(e-1)+3; 3*e+1:3*e+3]
         
-        # Assemble
+        # Assemble into global matrices
         K[dofs, dofs] += ke
         M[dofs, dofs] += me
     end
@@ -106,40 +109,54 @@ end
 
 ---
 
-## Temperature Dependence
+## 🌡️ Temperature Dependence
 
 ### Material Property Interpolation
 
-Young's modulus varies with temperature according to user-defined data points:
+Young's modulus varies with temperature according to **user-defined data points**:
 
-$$E(T) = \text{interpolate}(T; \{T_i, E_i\}_{i=1}^n)$$
+$$\boxed{E(T) = \text{interpolate}(T; \{(T_i, E_i)\}_{i=1}^{n_{points}})}$$
 
-Linear interpolation is used between data points:
+**Implementation using linear interpolation:**
 
 ```julia
-E_interp = interpolate((T_data[:,1],), T_data[:,2], Gridded(Linear()))
-E = T -> E_interp(T)
+# Define temperature-Young's modulus pairs
+E_data = [
+    -10.0  250e9;   # Winter conditions
+     20.0  207e9;   # Reference temperature  
+     50.0  150e9    # Summer conditions
+]
+
+# Create interpolation function
+E_interp = interpolate((E_data[:,1],), E_data[:,2], Gridded(Linear()))
+E = T -> E_interp(T)  # Temperature-dependent function
 ```
 
-### Stiffness Matrix Update
+### Stiffness Matrix Evolution
 
-At each temperature $T$, the stiffness matrix becomes:
+At temperature $T$, the **global stiffness matrix** becomes:
 
 $$\mathbf{K}(T) = \sum_{e=1}^{n_{elem}} \mathbf{L}_e^T \mathbf{k}^e(E(T)) \mathbf{L}_e$$
 
-where $\mathbf{L}_e$ is the Boolean connectivity matrix for element $e$.
+where:
+- $\mathbf{L}_e \in \{0,1\}^{n \times 6}$ = Boolean connectivity matrix for element $e$
+- $\mathbf{k}^e(E(T))$ = Element stiffness matrix at temperature $T$
+
+**Key Properties:**
+- Mass matrix $\mathbf{M}$ remains **temperature-independent**
+- Only stiffness scales with $E(T)$: $\mathbf{k}^e(T) = E(T) \cdot \mathbf{k}^e_0$
 
 ---
 
-## Support Modeling
+## 🏛️ Support Modeling
 
 ### Coordinate Transformation
 
-Support elements can be oriented at arbitrary angles. The transformation from local to global coordinates is:
+Support elements (piers, cables, etc.) can be oriented at **arbitrary angles**. The transformation from local to global coordinates is:
 
-$$\mathbf{k}_{global}^{support} = \mathbf{T}^T \mathbf{k}_{local}^{support} \mathbf{T}$$
+$$\boxed{\mathbf{k}_{global}^{support} = \mathbf{T}^T \mathbf{k}_{local}^{support} \mathbf{T}}$$
 
-where the transformation matrix for a 2D rotation by angle $\theta$ is:
+The **2D rotation transformation matrix** for angle $\theta$ (measured counterclockwise from horizontal):
 
 $$\mathbf{T} = \begin{bmatrix}
 \cos\theta & \sin\theta & 0 & 0 & 0 & 0 \\
@@ -150,13 +167,21 @@ $$\mathbf{T} = \begin{bmatrix}
 0 & 0 & 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
+**Angle Conventions:**
+- $\theta = 0°$ → Horizontal, pointing right
+- $\theta = -90°$ → Vertical, pointing down  
+- $\theta = 90°$ → Vertical, pointing up
+
 ### DOF Connectivity
 
-Support elements connect to the main bridge through shared DOFs:
+Support elements connect to the main bridge through **shared degrees of freedom**:
 
-1. **Bridge DOFs**: $\{u_i, v_i, \theta_i\}$ for connection node $i$
-2. **Support DOFs**: Local support numbering mapped to global system
-3. **Connectivity**: User-specified which DOFs are shared (e.g., $[1,2]$ for pinned, $[1,2,3]$ for rigid)
+1. **Bridge DOFs**: $\{u_i, v_i, \theta_i\}$ at connection node $i$
+2. **Support DOFs**: Local support numbering → mapped to global system  
+3. **Connectivity Types**:
+   - **Pinned**: $[1,2]$ → Share only translations
+   - **Rigid**: $[1,2,3]$ → Share all DOFs
+   - **Custom**: User-defined DOF sharing
 
 ### Expanded System Assembly
 
@@ -171,66 +196,174 @@ $$\begin{bmatrix}
 \mathbf{K}_{coupling}^T & \mathbf{K}_{support}
 \end{bmatrix} \mathbf{u} = \mathbf{f}$$
 
+**System Properties:**
+- **Expanded DOFs**: $n_{total} = n_{bridge} + \sum n_{support,i}$  
+- **Coupling**: Through shared DOF constraints
+- **Temperature dependence**: Both bridge and supports scale with $E(T)$
+
 ---
 
-## Modal Analysis
+## 🎵 Modal Analysis
 
 ### Generalized Eigenvalue Problem
 
-Natural frequencies and mode shapes are found by solving:
+Natural frequencies and mode shapes are obtained by solving:
 
-$$\mathbf{K}\boldsymbol{\phi}_i = \lambda_i \mathbf{M}\boldsymbol{\phi}_i$$
+$$\boxed{\mathbf{K}(T)\boldsymbol{\phi}_i = \lambda_i(T) \mathbf{M}\boldsymbol{\phi}_i}$$
 
-where:
-- $\lambda_i = \omega_i^2$ = squared natural frequency
-- $\boldsymbol{\phi}_i$ = mode shape vector
-- $\omega_i = 2\pi f_i$ = angular frequency
+**Solution Properties:**
+- $\lambda_i(T) = \omega_i^2(T)$ = squared natural frequency
+- $\boldsymbol{\phi}_i(T) \in \mathbb{R}^n$ = mode shape vector
+- $f_i(T) = \frac{\omega_i(T)}{2\pi}$ = natural frequency [Hz]
+
+### Temperature-Dependent Eigenvalues
+
+Since $\mathbf{K}(T) = E(T) \mathbf{K}_0$, the **frequencies scale as**:
+
+$$f_i(T) = \sqrt{\frac{E(T)}{E_0}} \cdot f_{i,0}$$
+
+This relationship enables **efficient frequency interpolation** across temperature ranges.
 
 ### Solution Method
 
-For large sparse systems, ARPACK is used for efficient eigenvalue computation:
+For large sparse systems, **ARPACK** provides efficient computation:
 
 ```julia
+# Solve for lowest n_modes eigenvalues
 λ, φ = eigs(K, M, nev=n_modes, which=:SM, sigma=1e-6)
-frequencies = sqrt.(λ) / (2π)  # Convert to Hz
+
+# Convert to natural frequencies  
+frequencies = sqrt.(real.(λ)) / (2π)  # [Hz]
+mode_shapes = real.(φ)               # [n_dofs × n_modes]
 ```
 
-### Mode Normalization
+### Mass Normalization
 
-Mode shapes are typically normalized such that:
+Mode shapes are normalized to **unit modal mass**:
 
-$$\boldsymbol{\phi}_i^T \mathbf{M} \boldsymbol{\phi}_i = 1$$
+$$\boldsymbol{\phi}_i^T \mathbf{M} \boldsymbol{\phi}_i = 1 \quad \forall i$$
 
-This ensures unit modal mass for each mode.
+This ensures the modal equations have **consistent scaling**.
 
 ---
 
-## Model Order Reduction
+## 📉 Model Order Reduction
 
-### Modal Truncation
+### Modal Truncation Strategy
 
-The physical displacement vector is approximated using a limited number of modes:
+Physical displacements are approximated using a **reduced basis**:
 
-$$\mathbf{u}(t) \approx \boldsymbol{\Phi}_r \mathbf{q}(t) = \sum_{i=1}^r \boldsymbol{\phi}_i q_i(t)$$
+$$\boxed{\mathbf{u}(t) \approx \boldsymbol{\Phi}_r \mathbf{q}(t) = \sum_{i=1}^r \boldsymbol{\phi}_i q_i(t)}$$
 
-where:
-- $\boldsymbol{\Phi}_r = [\boldsymbol{\phi}_1, \boldsymbol{\phi}_2, \ldots, \boldsymbol{\phi}_r]$ = truncated mode shape matrix
-- $\mathbf{q}(t) = [q_1(t), q_2(t), \ldots, q_r(t)]^T$ = modal coordinates
-- $r \ll n$ = number of retained modes
+**Truncation Criteria:**
+- **Frequency-based**: Retain modes up to cutoff frequency $f_{cut}$
+- **Number-based**: Keep first $r$ modes
+- **Energy-based**: Retain modes capturing desired energy fraction
 
-### Modal Equations
+### Modal Coordinate Equations
 
-Substituting the modal expansion into the governing equation and pre-multiplying by $\boldsymbol{\Phi}_r^T$:
+Substituting modal expansion and **pre-multiplying by $\boldsymbol{\Phi}_r^T$**:
 
-$$\ddot{\mathbf{q}} + 2\boldsymbol{\zeta}\boldsymbol{\Omega}\dot{\mathbf{q}} + \boldsymbol{\Omega}^2\mathbf{q} = \boldsymbol{\Phi}_r^T\mathbf{f}(t)$$
+$$\boxed{\ddot{\mathbf{q}} + 2\boldsymbol{\zeta}\boldsymbol{\Omega}\dot{\mathbf{q}} + \boldsymbol{\Omega}^2\mathbf{q} = \boldsymbol{\Phi}_r^T\mathbf{f}(t)}$$
 
-where:
-- $\boldsymbol{\Omega} = \text{diag}(\omega_1, \omega_2, \ldots, \omega_r)$ = natural frequency matrix
-- $\boldsymbol{\zeta} = \text{diag}(\zeta_1, \zeta_2, \ldots, \zeta_r)$ = modal damping ratios
+**Modal System Matrices:**
+- $\boldsymbol{\Omega}(T) = \text{diag}(\omega_1(T), \ldots, \omega_r(T))$ = natural frequency matrix
+- $\boldsymbol{\zeta} = \text{diag}(\zeta_1, \ldots, \zeta_r)$ = modal damping ratios
+- $\mathbf{q}(t) \in \mathbb{R}^r$ = modal coordinates
 
-### Advantages
+### Computational Advantages
 
 Modal reduction provides:
+
+1. **Dimension reduction**: $n \to r$ where $r \ll n$
+2. **Decoupled equations**: Diagonal system matrices
+3. **Physical insight**: Each mode represents distinct vibration pattern
+4. **Computational efficiency**: $O(r^3)$ vs $O(n^3)$ for time integration
+
+---
+
+## 🎬 Dynamic Simulation
+
+### Temperature-Dependent Modal Parameters
+
+For time-varying temperature $T(t)$, modal parameters are **interpolated**:
+
+$$\omega_i(t) = \omega_i(T(t)), \quad \boldsymbol{\phi}_i(t) = \boldsymbol{\phi}_i(T(t))$$
+
+**Implementation using interpolation functions:**
+
+```julia
+# Create interpolators for each parameter
+ω_interp = interpolate((modes, temps), frequencies, Gridded(Linear()))
+Φ_interp = interpolate((dofs, modes, temps), mode_shapes, Gridded(Linear()))
+
+# Time-dependent functions
+ω_T = t -> ω_interp(1:n_modes, T(t))
+Φ_T = t -> Φ_interp(1:n_dofs, 1:n_modes, T(t))
+```
+
+### Modal ODE System
+
+The **temperature-dependent modal equations** become:
+
+$$\ddot{q}_i + 2\zeta_i\omega_i(T(t))\dot{q}_i + \omega_i^2(T(t))q_i = \hat{f}_i(t)$$
+
+where $\hat{f}_i(t) = \boldsymbol{\phi}_i^T(T(t)) \mathbf{f}(t)$ is the **modal force**.
+
+### Physical Reconstruction
+
+Modal coordinates are transformed back to **physical displacements**:
+
+$$\mathbf{u}(t) = \boldsymbol{\Phi}(T(t)) \mathbf{q}(t)$$
+
+**Velocity and acceleration** are obtained by differentiation:
+$$\dot{\mathbf{u}}(t) = \boldsymbol{\Phi}(T(t)) \dot{\mathbf{q}}(t) + \dot{\boldsymbol{\Phi}}(T(t)) \mathbf{q}(t)$$
+
+---
+
+## 📊 Modal Assurance Criterion
+
+### Mode Tracking Across Temperature
+
+To ensure **consistent mode ordering** across temperatures, the Modal Assurance Criterion (MAC) is used:
+
+$$\text{MAC}_{ij} = \frac{|\boldsymbol{\phi}_i^T \boldsymbol{\phi}_j|^2}{(\boldsymbol{\phi}_i^T \boldsymbol{\phi}_i)(\boldsymbol{\phi}_j^T \boldsymbol{\phi}_j)}$$
+
+**Interpretation:**
+- $\text{MAC} = 1$ → Perfect correlation (same mode)
+- $\text{MAC} = 0$ → Orthogonal modes (different modes)
+- $\text{MAC} > 0.9$ → Strong correlation (likely same mode)
+
+### Implementation
+
+```julia
+function track_modes(φ_prev, φ_curr)
+    for i = 1:n_modes
+        # Check correlation with previous temperature
+        correlation = dot(φ_curr[:, i], φ_prev[:, i])
+        
+        # Flip mode if negatively correlated
+        if correlation < 0
+            φ_curr[:, i] *= -1
+        end
+    end
+    return φ_curr
+end
+```
+
+---
+
+## 📚 References
+
+1. **Bathe, K.J.** (2014). *Finite Element Procedures*. Prentice Hall.
+2. **Chopra, A.K.** (2017). *Dynamics of Structures: Theory and Applications*. Pearson.
+3. **Zienkiewicz, O.C. & Taylor, R.L.** (2000). *The Finite Element Method*. Butterworth-Heinemann.
+4. **Allemang, R.J.** (2003). "The Modal Assurance Criterion - Twenty years of use and abuse." *Sound and Vibration*, 37(8), 14-21.
+5. **Peeters, B. & De Roeck, G.** (1999). "Reference-based stochastic subspace identification for output-only modal analysis." *Mechanical Systems and Signal Processing*, 13(6), 855-878.
+
+---
+
+**🔬 Next Steps:** [Getting Started Guide](getting-started.md) • [API Reference](api-reference.md) • [Examples](examples.md)
 1. **Computational efficiency**: $r \ll n$ reduces system size dramatically
 2. **Physical insight**: Each mode has clear interpretation
 3. **Numerical stability**: Well-conditioned equations

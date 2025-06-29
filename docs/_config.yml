@@ -4,11 +4,14 @@ theme: jekyll-theme-cayman
 markdown: kramdown
 highlighter: rouge
 
+# Enable GitHub Pages features
 plugins:
   - jekyll-sitemap
   - jekyll-feed
   - jekyll-optional-front-matter
+  - jekyll-toc
 
+# Navigation menu
 navigation:
   - title: Home
     url: /
@@ -23,9 +26,36 @@ navigation:
 
 repository: yourusername/BridgeFEM.jl
 
-# Enable math rendering
+# Enhanced math rendering with MathJax v3
 kramdown:
   math_engine: mathjax
   math_engine_opts:
     preview: true
     preview_as_code: false
+  input: GFM
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    block:
+      line_numbers: true
+
+# Table of contents settings
+toc:
+  min_level: 1
+  max_level: 4
+  ordered_list: false
+  no_toc_section_class: no_toc_section
+  list_id: toc
+  list_class: section-nav
+  sublist_class: ""
+  item_class: toc-entry
+  item_prefix: toc-
+
+# Custom CSS and JS
+sass:
+  style: compressed
+
+# Collections for better organization
+collections:
+  examples:
+    output: true
+    permalink: /:collection/:name/
