@@ -13,7 +13,7 @@ A = 4.0              # Cross-section area (m^2)
 I = 3.0              # Moment of inertia (m^4)
 E0 = 207e9             # Base Young's modulus (Pa)
 α = -1e5              # E-temperature slope (Pa/K)
-cutoff_freq = 25.0  # Cutoff frequency for modes (Hz)
+cutoff_freq = 50.0  # Cutoff frequency for modes (Hz)
 
 bc = BridgeBC([  # Node 1: both translational and rotational DOFs fixed
     [1, "trans"],
@@ -133,7 +133,7 @@ prob = ODEProblem(beam_modal_ode!, u0, tspan,
                         load_vector = load_vector,
                     ))
 
-@info "Solving dynamic response..."
+@info "Solving dynamic response with $(n_modes) modes..."
 @time sol = solve(prob, BS3(), saveat=0.01)
 
 q = reduce(hcat, sol.u)

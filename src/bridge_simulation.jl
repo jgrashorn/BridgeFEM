@@ -80,38 +80,6 @@ function dict_to_bridge_options(dict::Dict)
     )
 end
 
-# function save_options_to_json(bo::BridgeOptions; fname::String="data/bridge_options.json", T::Union{Vector{Float64},Nothing}=nothing)
-
-#     if bo.E_T == Matrix{Float64}(undef, 0,2) && !isnothing(T)
-#         bo.E_T = hcat(T, bo.E.(T))  # Create a matrix of temperatures and corresponding Young's moduli
-#     elseif bo.E_T == Matrix{Float64}(undef, 0,2) && isnothing(T)
-#         @error "No temperature provided. Cannot save to JSON!\n Please provide temperatures as a Vector{Float64} to the `T` keyword argument."
-#         return nothing
-#     end
-#     options_dict = Dict(
-#         "n_elem" => bo.n_elem,
-#         "bcconds" => [[c[1], c[2]] for c in bo.bc_nodes.conds],
-#         "L" => bo.L,
-#         "ρ" => bo.ρ,
-#         "A" => bo.A,
-#         "I" => bo.I,
-#         "E_T" => [bo.E_T[i, :] for i in 1:size(bo.E_T, 1)],
-#         "cutoff_freq" => bo.cutoff_freq
-#     )
-
-#     # Ensure the directory exists before saving
-#     dir = dirname(fname)
-#     if !isdir(dir)
-#         mkpath(dir)
-#     end
-#     open(fname, "w") do file
-#         JSON.print(file, options_dict, 4)
-#         flush(file)
-#     end
-#     @info "Bridge options saved to $fname"
-
-# end
-
 function load_options_from_json(fname::String="data/bridge_options.json")
     options_dict = JSON.parsefile(fname)
     E_T_mat = Float64.(reduce(vcat, [row' for row in options_dict["E_T"]]))
@@ -422,24 +390,6 @@ function assemble_and_decompose(bo::BridgeOptions, Ts::Vector{Float64}; supports
     return M, K, λs, vectors, vectors_unnormalized
 end
 
-# function assemble_and_decompose(bo::BridgeOptions, Ts::Vector{Float64})
-#     nTs = length(Ts)
-#     @info "Assembling matrices for $nTs temperatures"
-#     mats = [assemble_matrices(bo, T) for T in Ts]
-#     M = cat([mats[i][1] for i in 1:nTs]..., dims=3)
-#     K = cat([mats[i][2] for i in 1:nTs]..., dims=3)
-
-#     @info "Decomposing matrices"
-#     λs, vectors, vectors_unnormalized = decompose_matrices(M, K)
-
-#     keep_modes = λs[:,1] .< bo.cutoff_freq
-#     λs = λs[keep_modes, :]
-#     vectors = vectors[:, keep_modes, :]
-#     vectors_unnormalized = vectors_unnormalized[:, keep_modes, :]
-
-#     return M, K, λs, vectors, vectors_unnormalized
-# end
-
 function beam_modal_ode!(du, u, p, t)
     T = p.T_func(t)
     q     = u[1:p.n_modes]        # modal displacements
@@ -467,29 +417,6 @@ function beam_modal_ode!(du, u, p, t)
     du[1:p.n_modes] .= qdot
     du[p.n_modes+1:end] .= qddot
 end
-
-# function reconstruct_physical(bo::BridgeOptions, q_full, Φ_interp, T_func, time)
-#     n_dofs  = bo.n_dofs
-#     n_modes_total = size(q_full, 1)
-#     n_modes = n_modes_total ÷ 2
-#     n_times = length(time)
-
-#     u_full  = zeros(n_dofs, n_times)
-#     du_full = zeros(n_dofs, n_times)
-
-#     for (i, t) in enumerate(time)
-#         T_now = T_func(t)
-#         Φ = Φ_interp(1:n_dofs, 1:n_modes, T_now)
-
-#         q_disp = q_full[1:n_modes, i]
-#         q_vel  = q_full[n_modes+1:end, i]
-
-#         u_full[:, i]  .= Φ * q_disp
-#         du_full[:, i] .= Φ * q_vel
-#     end
-
-#     return u_full, du_full
-# end
 
 function reconstruct_physical(so::SimulationOptions, q_full, Φ_interp, T_func, time)
     
