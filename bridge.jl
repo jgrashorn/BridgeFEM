@@ -119,8 +119,18 @@ prob = ODEProblem(beam_modal_ode!, u0, tspan,
 
 q = reduce(hcat, sol.u)
 
+u, du = reconstruct_physical(sim_opts, q, Φ_T, T_func, sol.t)
 # # 1. Plot structure only
 # plot_bridge_with_supports(bo, supports)
+
+# 2. Animate only every 10th time step for faster animation
+time_subsample = sol.t[1:10:end]
+u_subsample = u[:, 1:2:end]
+anim_fast = animate_dynamic_response(bo, supports, u_subsample, time_subsample,
+                                   scale_factor=4000.0,
+                                   n_frames=100,
+                                   fps=24,
+                                   filename="bridge_fast_dynamics.gif")
 
 # support_dof_maps, total_dofs = create_support_dof_mapping(bo, supports)
 

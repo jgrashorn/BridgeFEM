@@ -468,18 +468,45 @@ function beam_modal_ode!(du, u, p, t)
     du[p.n_modes+1:end] .= qddot
 end
 
-function reconstruct_physical(bo::BridgeOptions, q_full, Φ_interp, T_func, time)
-    n_dofs  = bo.n_dofs
+# function reconstruct_physical(bo::BridgeOptions, q_full, Φ_interp, T_func, time)
+#     n_dofs  = bo.n_dofs
+#     n_modes_total = size(q_full, 1)
+#     n_modes = n_modes_total ÷ 2
+#     n_times = length(time)
+
+#     u_full  = zeros(n_dofs, n_times)
+#     du_full = zeros(n_dofs, n_times)
+
+#     for (i, t) in enumerate(time)
+#         T_now = T_func(t)
+#         Φ = Φ_interp(1:n_dofs, 1:n_modes, T_now)
+
+#         q_disp = q_full[1:n_modes, i]
+#         q_vel  = q_full[n_modes+1:end, i]
+
+#         u_full[:, i]  .= Φ * q_disp
+#         du_full[:, i] .= Φ * q_vel
+#     end
+
+#     return u_full, du_full
+# end
+
+function reconstruct_physical(so::SimulationOptions, q_full, Φ_interp, T_func, time)
+    
+    bo = so.bridge
+    # Auto-detect total DOFs from the interpolator dimensions
+    total_dofs = so.total_dofs
+    
     n_modes_total = size(q_full, 1)
     n_modes = n_modes_total ÷ 2
     n_times = length(time)
 
-    u_full  = zeros(n_dofs, n_times)
-    du_full = zeros(n_dofs, n_times)
+    u_full  = zeros(total_dofs, n_times)
+    du_full = zeros(total_dofs, n_times)
 
     for (i, t) in enumerate(time)
         T_now = T_func(t)
-        Φ = Φ_interp(1:n_dofs, 1:n_modes, T_now)
+        Φ = Φ_interp(T_now)
 
         q_disp = q_full[1:n_modes, i]
         q_vel  = q_full[n_modes+1:end, i]
@@ -830,3 +857,105 @@ function animate_mode(bo::BridgeOptions, supports::Vector{SupportElement},
     return anim
 end
 
+function animate_dynamic_response(bo::BridgeOptions, supports::Vector{SupportElement}, 
+                                 u::Matrix{Float64}, time::Vector{Float64};
+                                 scale_factor=1.0, n_frames=100, fps=20, 
+                                 filename="bridge_dynamics.gif", show_nodes=false,
+                                 title_prefix="Bridge Dynamic Response")
+    
+    # Calculate fixed limits based on maximum deformation
+    bridge_extent = bo.L
+    support_extent = maximum([s.L for s in supports], init=0.0)
+    
+    # Find maximum displacements for proper scaling
+    max_x_disp = maximum(abs.(u[1:3:min(bo.n_dofs, size(u,1)), :]), init=0.0)
+    max_y_disp = maximum(abs.(u[2:3:min(bo.n_dofs, size(u,1)), :]), init=0.0)
+    max_deformation = max(max_x_disp, max_y_disp) * scale_factor
+    
+    padding = 20.0
+    x_limits = (-padding - support_extent - max_deformation, 
+                bridge_extent + padding + support_extent + max_deformation)
+    y_limits = (-padding - support_extent - max_deformation, 
+                padding + max_deformation)
+    
+    # Sample time indices for animation
+    if n_frames > length(time)
+        time_indices = 1:length(time)
+    else
+        time_indices = round.(Int, range(1, length(time), length=n_frames))
+    end
+    
+    anim = Animation()
+    
+    @info "Creating animation with $(length(time_indices)) frames..."
+    
+    for (frame_num, i) in enumerate(time_indices)
+        t = time[i]
+        current_displacement = u[:, i]
+        
+        # Create plot with current displacement
+        p = plot_bridge_with_supports(bo, supports, 
+                                    mode_shape=current_displacement, 
+                                    scale_factor=scale_factor,
+                                    title="$title_prefix (t = $(round(t, digits=2))s)",
+                                    show_nodes=show_nodes)
+        
+        # Apply fixed layout
+        plot!(p, 
+              xlims=x_limits, 
+              ylims=y_limits,
+              aspect_ratio=2.0,
+              size=(1200, 400),
+              legend=:topright,
+              legend_background_color=:white,
+              left_margin=3Plots.mm,
+              right_margin=10Plots.mm,
+              top_margin=3Plots.mm,
+              bottom_margin=5Plots.mm)
+        
+        frame(anim)
+        
+        # Progress indicator
+        if frame_num % 10 == 0
+            @info "Processed frame $frame_num/$(length(time_indices))"
+        end
+    end
+    
+    @info "Saving animation: $filename"
+    gif(anim, filename, fps=fps)
+    return anim
+end
+
+# Convenience function that combines reconstruction and animation
+function animate_from_modal_response(bo::BridgeOptions, supports::Vector{SupportElement},
+                                   q::Matrix{Float64}, Φ_interp, T_func, time::Vector{Float64};
+                                   scale_factor=1000.0, n_frames=100, fps=20,
+                                   filename="bridge_modal_dynamics.gif", show_nodes=false)
+    
+    @info "Reconstructing physical displacements..."
+    u, du = reconstruct_physical(bo, q, Φ_interp, T_func, time; supports=supports)
+    
+    @info "Creating animation..."
+    return animate_dynamic_response(bo, supports, u, time;
+                                  scale_factor=scale_factor, n_frames=n_frames, 
+                                  fps=fps, filename=filename, show_nodes=show_nodes)
+end
+
+# Function to animate specific DOFs (e.g., only bridge or only supports)
+function animate_bridge_response(bo::BridgeOptions, supports::Vector{SupportElement},
+                               u::Matrix{Float64}, time::Vector{Float64}, dof_range::UnitRange{Int};
+                               scale_factor=1000.0, n_frames=100, fps=20,
+                               filename="bridge_partial_dynamics.gif")
+    
+    # Extract only the specified DOF range
+    u_partial = u[dof_range, :]
+    
+    # Create a temporary displacement vector with zeros for non-selected DOFs
+    u_full_temp = zeros(size(u, 1), size(u, 2))
+    u_full_temp[dof_range, :] = u_partial
+    
+    return animate_dynamic_response(bo, supports, u_full_temp, time;
+                                  scale_factor=scale_factor, n_frames=n_frames,
+                                  fps=fps, filename=filename,
+                                  title_prefix="Bridge Response (Partial DOFs)")
+end
