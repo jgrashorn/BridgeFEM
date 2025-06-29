@@ -13,7 +13,7 @@ A = 4.0              # Cross-section area (m^2)
 I = 3.0              # Moment of inertia (m^4)
 E0 = 207e9             # Base Young's modulus (Pa)
 α = -1e5              # E-temperature slope (Pa/K)
-cutoff_freq = 100.0  # Cutoff frequency for modes (Hz)
+cutoff_freq = 25.0  # Cutoff frequency for modes (Hz)
 
 bc = BridgeBC([  # Node 1: both translational and rotational DOFs fixed
     [1, "trans"],
@@ -26,27 +26,38 @@ bo = BridgeOptions(n_elem, bc, L, ρ, A, I, [-100 206e9; 70 150e9], cutoff_freq)
 
 # Support element parameters with temperature dependence
 E_bridge = [
-    -10.0  200e9;   # E at -10°C
+    -10.0  250e9;   # E at -10°C
      20.0  207e9;   # E at 20°C
      50.0  150e9    # E at 50°C (thermal expansion reduces stiffness)
 ]
 
 E_support = E_bridge
 
-A_support = 0.1        # Cross-section area (m^2)
-I_support = 0.01       # Moment of inertia (m^4)
+A_support = 0.01        # Cross-section area (m^2)
+I_support = 0.001       # Moment of inertia (m^4)
 L_support = 50.0       # Length of support element (m)
 
 se = [SupportElement(
-        n_elem ÷ 2 + 1,          # Connect to middle of bridge
+        n_elem ÷ 3,          # Connect to middle of bridge
         [1, 2, 3],               # Connect x,y,ϕ DOFs
-        -90.0,                   # angle (degrees)
+        -150.0,                   # angle (degrees)
         5,                       # 5 elements in support
         A_support,               # Cross-sectional area
         I_support,               # Moment of inertia
         E_support,          # Temperature-dependent Young's modulus
         L_support,               # Length
-        BCTypes["all"]           # Fix all DOFs at bottom
+        BCTypes["trans"]           # Fix all DOFs at bottom
+    ),
+    SupportElement(
+        n_elem - (n_elem ÷ 3),          # Connect to middle of bridge
+        [1, 2, 3],               # Connect x,y,ϕ DOFs
+        -30.0,                   # angle (degrees)
+        5,                       # 5 elements in support
+        A_support,               # Cross-sectional area
+        I_support,               # Moment of inertia
+        E_support,          # Temperature-dependent Young's modulus
+        L_support,               # Length
+        BCTypes["trans"]           # Fix all DOFs at bottom
     )]
 
 # Example workflow with supports:
@@ -82,23 +93,31 @@ load_vector = (t, dof) -> begin
     return f
 end
 
-force_node = collect(2:3:size(vectors,1))  # Node to apply force on (y-displacement)
+force_node = collect(2:3:3*bo.n_elem)  # Node to apply force on (y-displacement)
+
+tspan = (0.0, 300.0)
 
 load_vector = (t, dof) -> begin 
     f = zeros(length(dof))
     
-    # Apply sinusoidal force to y-displacement of specified node
-    y_dof = force_node  # y-displacement DOF
+    # Linear frequency sweep from f1 to f2
+    f1 = 0.1  # Starting frequency (Hz)
+    f2 = 10.0 # Ending frequency (Hz)
     
-    # Only apply if this DOF exists in the expanded system
-    f[y_dof] .= 10000.0 * sin(2π * 10.0 * t)
+    # Instantaneous frequency: f(t) = f1 + (f2-f1) * t/T
+    freq_t = f1 + (f2 - f1) * (t / tspan[2])
+    
+    # Phase accumulation for chirp: φ(t) = 2π ∫₀ᵗ f(τ) dτ
+    phase = 2π * (f1 * t + (f2 - f1) * t^2 / (2 * tspan[2]))
+    
+    y_dof = force_node
+    f[y_dof] .= 1000.0 * sin(phase)
     
     return f
 end
 
-damping_ratio = 0.0001
+damping_ratio = 0.0000
 
-tspan = (0.0, 120.0)
 u0 = zeros(2 * n_modes)
 
 T_func = (t) -> Ts[end] - (Ts[end] - Ts[1]) * (t / tspan[2])  # Linear temperature change from Ts[1] to Ts[end]
@@ -123,12 +142,11 @@ u, du = reconstruct_physical(sim_opts, q, Φ_T, T_func, sol.t)
 # # 1. Plot structure only
 # plot_bridge_with_supports(bo, supports)
 
-# 2. Animate only every 10th time step for faster animation
-time_subsample = sol.t[1:10:end]
+time_subsample = sol.t[1:2:end]
 u_subsample = u[:, 1:2:end]
 anim_fast = animate_dynamic_response(bo, supports, u_subsample, time_subsample,
-                                   scale_factor=4000.0,
-                                   n_frames=100,
+                                   scale_factor=100.0,
+                                   n_frames=500,
                                    fps=24,
                                    filename="bridge_fast_dynamics.gif")
 
