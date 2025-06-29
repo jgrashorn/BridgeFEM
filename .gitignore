@@ -7,3 +7,11 @@
 /support_damage_demo.jl
 /test_3dof.jl
 /test_supports.jl
+
+/data
+*.gif
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.pdf
