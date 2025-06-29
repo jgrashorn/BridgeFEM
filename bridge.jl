@@ -2,11 +2,14 @@ using LinearAlgebra, DifferentialEquations, Plots
 using Interpolations
 using JSON
 
-include("src/bridge_simulation.jl")
+include("src/bridge_model.jl")
+include("src/model_reduction.jl")
+include("src/utils.jl")
+include("src/dynamic_simulation.jl")
 
 # Beam and material parameters
 L = 300.0               # Beam length (m)
-n_elem = 25           # Number of finite elements
+n_elem = 50           # Number of finite elements
 n_node = n_elem + 1   # Number of nodes
 ρ = 7800.0            # Density (kg/m^3)
 A = 4.0              # Cross-section area (m^2)
@@ -21,8 +24,6 @@ bc = BridgeBC([  # Node 1: both translational and rotational DOFs fixed
 ])
 
 bo = BridgeOptions(n_elem, bc, L, ρ, A, I, [-100 206e9; 70 150e9], cutoff_freq)
-
-@info "Number of modes: $n_modes"
 
 # Support element parameters with temperature dependence
 E_bridge = [
@@ -78,6 +79,7 @@ M, K, λs, vectors, vectors_unnormalized = assemble_and_decompose(bo, collect(Ts
 # Solve dynamics (same ODE, but with expanded system)
 n_modes = size(λs, 1)
 total_dofs = size(vectors, 1)
+@info "Number of modes: $n_modes"
 
 # Create interpolators (same as before)
 ω_interp = interpolate((1:size(λs,1), Ts), λs, Gridded(Linear()))
@@ -125,7 +127,7 @@ T_func = (t) -> Ts[end] - (Ts[end] - Ts[1]) * (t / tspan[2])  # Linear temperatu
 prob = ODEProblem(beam_modal_ode!, u0, tspan,
                     (; 
                         n_modes=n_modes,
-                        n_dofs=total_dofs,  # FIXED: Use total DOFs including supports
+                        n_dofs=total_dofs,
                         T_func = T_func,
                         ω_interp = ω_T,
                         ζ = fill(damping_ratio, n_modes),  # Constant damping
@@ -133,12 +135,24 @@ prob = ODEProblem(beam_modal_ode!, u0, tspan,
                         load_vector = load_vector,
                     ))
 
-@info "Solving dynamic response with $(n_modes) modes..."
-@time sol = solve(prob, BS3(), saveat=0.01)
+params = (
+    n_modes=n_modes,
+    n_dofs=total_dofs,
+    T_func = T_func,
+    ω_interp = ω_T,
+    ζ = fill(damping_ratio, n_modes),
+    Φ_interp = Φ_T,
+    load_vector = load_vector,
+)
 
+dt_manual = 0.01  # Manual integration time step
+
+@info "Solving dynamic response with $(n_modes) modes..."
+@time sol = solve(prob, saveat=0.01);
 q = reduce(hcat, sol.u)
 
 u, du = reconstruct_physical(sim_opts, q, Φ_T, T_func, sol.t)
+
 # # 1. Plot structure only
 # plot_bridge_with_supports(bo, supports)
 
