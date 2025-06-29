@@ -15,6 +15,10 @@ A Julia library for finite element analysis of bridges with temperature-dependen
 - **💾 Data persistence**: Complete simulation configurations saved to JSON
 - **🔍 Operational Modal Analysis**: GPU-accelerated system identification from ambient data
 
+## Disclaimer!
+
+As is evident by the heavy use of emojis in the readme and throughout the examples, many parts of this code (and nearly all of the documentation) were created using LLMs. The core functionality should work as intended, but there might be errors in the explanations.
+
 ## 🚀 Quick Start
 
 ### Installation
