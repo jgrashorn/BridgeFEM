@@ -45,16 +45,6 @@ mutable struct BridgeOptions
         return BridgeOptions(n_elem, bc_nodes, L, ρ, A, I, E_T, E, cutoff_freq)
     end
 
-    function BridgeOptions(n_elem::Int, bc_nodes::BridgeBC, L::Float64, ρ::Float64, A::Float64, I::Float64, E::Function, T::Vector{Float64}, cutoff_freq::Float64)
-        E_T = hcat(T, E.(T))  # Create a matrix of temperatures and corresponding Young's moduli
-        return BridgeOptions(n_elem, bc_nodes, L, ρ, A, I, E_T, E, cutoff_freq)
-    end
-
-    function BridgeOptions(n_elem::Int, bc_nodes::BridgeBC, L::Float64, ρ::Float64, A::Float64, I::Float64, E::Function, cutoff_freq::Float64)
-        @warn "No temperature provided. When saving options, please provide temperatures!"
-        return BridgeOptions(n_elem, bc_nodes, L, ρ, A, I, Matrix{Float64}(undef, 0,2), E, cutoff_freq)
-    end
-
     function BridgeOptions(n_elem::Int, bc_nodes::BridgeBC, L::Float64, ρ::Float64, A::Float64, I::Float64, E_T::Matrix{Float64}, E::Function, cutoff_freq::Float64)
         n_nodes  = n_elem + 1
         n_dofs   = 3 * n_nodes  # 3 DOFs per node (u, v, theta)
@@ -90,37 +80,37 @@ function dict_to_bridge_options(dict::Dict)
     )
 end
 
-function save_options_to_json(bo::BridgeOptions; fname::String="data/bridge_options.json", T::Union{Vector{Float64},Nothing}=nothing)
+# function save_options_to_json(bo::BridgeOptions; fname::String="data/bridge_options.json", T::Union{Vector{Float64},Nothing}=nothing)
 
-    if bo.E_T == Matrix{Float64}(undef, 0,2) && !isnothing(T)
-        bo.E_T = hcat(T, bo.E.(T))  # Create a matrix of temperatures and corresponding Young's moduli
-    elseif bo.E_T == Matrix{Float64}(undef, 0,2) && isnothing(T)
-        @error "No temperature provided. Cannot save to JSON!\n Please provide temperatures as a Vector{Float64} to the `T` keyword argument."
-        return nothing
-    end
-    options_dict = Dict(
-        "n_elem" => bo.n_elem,
-        "bcconds" => [[c[1], c[2]] for c in bo.bc_nodes.conds],
-        "L" => bo.L,
-        "ρ" => bo.ρ,
-        "A" => bo.A,
-        "I" => bo.I,
-        "E_T" => [bo.E_T[i, :] for i in 1:size(bo.E_T, 1)],
-        "cutoff_freq" => bo.cutoff_freq
-    )
+#     if bo.E_T == Matrix{Float64}(undef, 0,2) && !isnothing(T)
+#         bo.E_T = hcat(T, bo.E.(T))  # Create a matrix of temperatures and corresponding Young's moduli
+#     elseif bo.E_T == Matrix{Float64}(undef, 0,2) && isnothing(T)
+#         @error "No temperature provided. Cannot save to JSON!\n Please provide temperatures as a Vector{Float64} to the `T` keyword argument."
+#         return nothing
+#     end
+#     options_dict = Dict(
+#         "n_elem" => bo.n_elem,
+#         "bcconds" => [[c[1], c[2]] for c in bo.bc_nodes.conds],
+#         "L" => bo.L,
+#         "ρ" => bo.ρ,
+#         "A" => bo.A,
+#         "I" => bo.I,
+#         "E_T" => [bo.E_T[i, :] for i in 1:size(bo.E_T, 1)],
+#         "cutoff_freq" => bo.cutoff_freq
+#     )
 
-    # Ensure the directory exists before saving
-    dir = dirname(fname)
-    if !isdir(dir)
-        mkpath(dir)
-    end
-    open(fname, "w") do file
-        JSON.print(file, options_dict, 4)
-        flush(file)
-    end
-    @info "Bridge options saved to $fname"
+#     # Ensure the directory exists before saving
+#     dir = dirname(fname)
+#     if !isdir(dir)
+#         mkpath(dir)
+#     end
+#     open(fname, "w") do file
+#         JSON.print(file, options_dict, 4)
+#         flush(file)
+#     end
+#     @info "Bridge options saved to $fname"
 
-end
+# end
 
 function load_options_from_json(fname::String="data/bridge_options.json")
     options_dict = JSON.parsefile(fname)
@@ -138,15 +128,35 @@ function load_options_from_json(fname::String="data/bridge_options.json")
     )
 end
 
-struct SupportElement
+mutable struct SupportElement
     connection_node::Int        # Node on main bridge this support connects to
     connection_dofs::Vector{Int} # Specific DOFs to connect (e.g., [1,2] for x,y only)
     angle::Float64             # Local to global rotation angle in degrees
     n_elem::Int               # Number of elements in the support
-    EA::Float64
-    EI::Float64
+    A::Float64                # Cross-sectional area (constant)
+    I::Float64                # Moment of inertia (constant)
+    E_T::Matrix{Float64}      # Young's modulus vs temperature data
+    E::Function               # Young's modulus as function of temperature
     L::Float64
     bc_bottom::Vector{Int}    # Boundary conditions at bottom of support (DOF types)
+end
+
+# Constructor with temperature-dependent Young's modulus
+function SupportElement(connection_node::Int, connection_dofs::Vector{Int}, angle::Float64, 
+                       n_elem::Int, A::Float64, I::Float64, E_T::Matrix{Float64}, L::Float64, 
+                       bc_bottom::Vector{Int})
+    E_interp = interpolate((E_T[:,1],), E_T[:,2], Gridded(Linear()))
+    E = T -> E_interp(T)
+    return SupportElement(connection_node, connection_dofs, angle, n_elem, A, I, E_T, E, L, bc_bottom)
+end
+
+# Constructor with constant Young's modulus (creates temperature-independent support)
+function SupportElement(connection_node::Int, connection_dofs::Vector{Int}, angle::Float64, 
+                       n_elem::Int, E_const::Float64, A::Float64, I::Float64, L::Float64, 
+                       bc_bottom::Vector{Int})
+    # Create dummy temperature data for constant E
+    E_T = [-100.0 E_const; 100.0 E_const]  # Constant E over temperature range, -100 to 100 should cover everything
+    return SupportElement(connection_node, connection_dofs, angle, n_elem, A, I, E_T, L, bc_bottom)
 end
 
 struct SimulationOptions
@@ -199,10 +209,26 @@ function support_element_to_dict(se::SupportElement)
         "connection_dofs" => se.connection_dofs,
         "angle" => se.angle,
         "n_elem" => se.n_elem,
-        "EA" => se.EA,
-        "EI" => se.EI,
+        "A" => se.A,
+        "I" => se.I,
+        "E_T" => [se.E_T[i, :] for i in 1:size(se.E_T, 1)],  # Save temperature-E data
         "L" => se.L,
         "bc_bottom" => se.bc_bottom
+    )
+end
+
+function dict_to_support_element(dict::Dict)
+    E_T_mat = Float64.(reduce(vcat, [row' for row in dict["E_T"]]))
+    return SupportElement(
+        dict["connection_node"],
+        Vector{Int}(dict["connection_dofs"]),
+        dict["angle"],
+        dict["n_elem"],
+        dict["A"],
+        dict["I"],
+        E_T_mat,  # Use temperature-dependent data
+        dict["L"],
+        Vector{Int}(dict["bc_bottom"])
     )
 end
 
@@ -226,19 +252,6 @@ function load_simulation_options(filename::String)::SimulationOptions
         dict_data["total_dofs"],
         dict_data["total_elements"],
         dict_data["created_at"],
-    )
-end
-
-function dict_to_support_element(dict::Dict)
-    return SupportElement(
-        dict["connection_node"],
-        Vector{Int}(dict["connection_dofs"]),
-        dict["angle"],
-        dict["n_elem"],
-        dict["EA"],
-        dict["EI"],
-        dict["L"],
-        Vector{Int}(dict["bc_bottom"])
     )
 end
 
@@ -433,13 +446,13 @@ function beam_modal_ode!(du, u, p, t)
     qdot  = u[p.n_modes+1:end]    # modal velocities
 
     # Interpolate natural frequencies at current T (convert Hz to rad/s)
-    ω = 2π .* p.ω_interp(1:p.n_modes, T)
+    ω = 2π .* p.ω_interp(T)
 
     # Damping ratios (could be constant, interpolated, or Rayleigh-like)
     ζ = p.ζ                      # vector of damping ratios per mode
 
     # Interpolate mode shapes at T
-    Φ = p.Φ_interp(1:p.n_dofs, 1:p.n_modes, T)
+    Φ = p.Φ_interp(T)
 
     # Assemble global load vector
     f = p.load_vector(t,1:p.n_dofs)
@@ -489,16 +502,21 @@ function transformation_matrix(θ)
     return T
 end
 
-function assemble_local_support(support::SupportElement)
+function assemble_local_support(support::SupportElement, T::Float64=20.0)
     n_nodes = support.n_elem + 1
     n_dofs = 3 * n_nodes
     dx = support.L / support.n_elem
     
     K_local = zeros(n_dofs, n_dofs)
     
+    # Get temperature-dependent Young's modulus
+    E = support.E(T)
+    EA = E * support.A
+    EI = E * support.I
+    
     # Assemble support elements
     for e = 1:support.n_elem
-        ke = frame_elem_stiffness(support.EA, support.EI, dx)
+        ke = frame_elem_stiffness(EA, EI, dx)
         # DOFs for element e: nodes e and e+1
         dofs = [3*(e-1)+1, 3*(e-1)+2, 3*(e-1)+3, 3*e+1, 3*e+2, 3*e+3]
         K_local[dofs, dofs] .+= ke
@@ -554,23 +572,23 @@ function assemble_matrices_with_supports(bo::BridgeOptions, supports::Vector{Sup
     M = spzeros(total_dofs, total_dofs)
     K = spzeros(total_dofs, total_dofs)
     
-    # Assemble main bridge
+    # Assemble main bridge (already temperature-dependent)
     M_bridge, K_bridge = assemble_matrices(bo, T)
     M[1:bo.n_dofs, 1:bo.n_dofs] .= M_bridge
     K[1:bo.n_dofs, 1:bo.n_dofs] .= K_bridge
     
-    # Assemble each support
+    # Assemble each support (now temperature-dependent)
     for (i, support) in enumerate(supports)
-        # Get local support matrices
-        K_local = assemble_local_support(support)
-        M_local = create_support_mass_matrix(support, bo.ρ)  # Add this function if missing
+        # Get local support matrices at temperature T
+        K_local = assemble_local_support(support, T)  # FIXED: Pass temperature
+        M_local = create_support_mass_matrix(support, bo.ρ)  # Mass not temperature dependent
         
         # Rotate BOTH matrices to global coordinates
         n_support_nodes = support.n_elem + 1
         T_expanded = create_expanded_transformation(support.angle, n_support_nodes)
         
         K_rotated = T_expanded' * K_local * T_expanded
-        M_rotated = T_expanded' * M_local * T_expanded  # MISSING: Rotate mass matrix too!
+        M_rotated = T_expanded' * M_local * T_expanded
         
         # Map to global DOFs
         dof_map = support_dof_maps[i]
@@ -585,14 +603,12 @@ function assemble_matrices_with_supports(bo::BridgeOptions, supports::Vector{Sup
         # Apply boundary conditions
         for dof_type in support.bc_bottom
             global_dof = fixed_node_global_dofs[dof_type]
-            # FIXED: Zero out entire row and column (not just diagonal)
-            K[:, global_dof] .= 0.0    # Zero column
-            K[global_dof, :] .= 0.0    # Zero row
-            K[global_dof, global_dof] = 1.0  # Set diagonal
-            
-            M[:, global_dof] .= 0.0    # Zero column  
-            M[global_dof, :] .= 0.0    # Zero row
-            M[global_dof, global_dof] = 0.0  # Zero diagonal (no mass for constrained DOF)
+            K[:, global_dof] .= 0.0
+            K[global_dof, :] .= 0.0
+            K[global_dof, global_dof] = 1.0
+            M[:, global_dof] .= 0.0
+            M[global_dof, :] .= 0.0
+            M[global_dof, global_dof] = 0.0
         end
     end
     
@@ -623,14 +639,13 @@ function create_support_mass_matrix(support::SupportElement, ρ::Float64)
     
     M_local = zeros(n_dofs, n_dofs)
     
+    # Mass matrix is not temperature dependent (density and geometry constant)
+    # Use reference area for mass calculation
+    A_ref = support.A
+    
     # Assemble mass matrix for each element
     for e = 1:support.n_elem
-        # Consistent mass matrix for frame element
-        me = frame_elem_mass(ρ, support.EA/support.EI, dx)  # You'll need this function
-        
-        # Or simpler lumped mass:
-        # me = lumped_frame_mass(ρ, A_support, dx)
-        
+        me = frame_elem_mass(ρ, A_ref, dx)
         dofs = [3*(e-1)+1, 3*(e-1)+2, 3*(e-1)+3, 3*e+1, 3*e+2, 3*e+3]
         M_local[dofs, dofs] .+= me
     end
