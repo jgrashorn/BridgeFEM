@@ -48,7 +48,7 @@ load_vector = (t, dof) -> begin
     # Apply load to y-displacement (DOF 2) of middle node (node n_elem÷2 + 1)
     middle_node = n_elem ÷ 2 + 1
     y_dof = 3 * (middle_node - 1) + 2  # y-displacement DOF
-    f[y_dof] = 1000.0 * sin(2π * t / 10.0)
+    f[y_dof] = 1e6 * sin(2π * 10 * t / 10.0)
     return f
 end
 
@@ -72,6 +72,26 @@ q = reduce(hcat,sol.u)
 
 @time u, du = reconstruct_physical(bo, q, Φ_interp, T_func, sol.t)
 
-plot_dof = n_elem ÷ 2 + 2 # Middle node for visualization
+plot_dof = 3*(n_elem ÷ 2) + 1 # Middle node for visualization
 plot(sol.t, u[plot_dof, :], color=:redsblues, xlabel="Time (s)", ylabel="Y-Displacement (m)", title="Beam Dynamics Simulation",
     legend=:topright)
+
+# Support parameters
+support_height = 15.0
+support_A = 0.5   # Smaller cross-section for supports
+support_I = 0.2   # Smaller moment of inertia for supports
+n_elem_per_support = 8
+
+supports = create_uniform_supports(1, L, n_node, support_height, n_elem_per_support, support_A, support_I)
+
+# Bridge with supports
+bws = BridgeWithSupports(bo, supports)
+M, K = assemble_matrices_with_supports(bws, 20.0)
+λs = real(eigvals(Matrix(K), Matrix(M)))  # Convert to dense matrices
+ωs = sqrt.(λs[λs .> 1e-6]) ./ (2π)  # Convert to Hz, filter out zero modes
+
+println("Nodes: $(bws.total_nodes), DOFs: $(bws.total_dofs)")
+println("Support locations (bridge nodes): $(getfield.(supports, :bridge_node))")
+
+# Plot bridge with supports
+p = plot_bridge_with_supports(bws)
