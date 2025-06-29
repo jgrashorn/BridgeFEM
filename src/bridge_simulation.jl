@@ -307,3 +307,192 @@ function reconstruct_physical(bo::BridgeOptions, q_full, Φ_interp, T_func, time
 
     return u_full, du_full
 end
+
+function transformation_matrix(θ)
+    c = cosd(θ)
+    s = sind(θ)
+    T = Matrix{Float64}(LinearAlgebra.I, 6, 6)
+    T[1,1] =  c; T[1,2] =  s
+    T[2,1] = -s; T[2,2] =  c
+    T[4,4] =  c; T[4,5] =  s
+    T[5,4] = -s; T[5,5] =  c
+    return T
+end
+
+struct SupportElement
+    connection_node::Int        # Node on main bridge this support connects to
+    connection_dofs::Vector{Int} # Specific DOFs to connect (e.g., [1,2] for x,y only)
+    angle::Float64             # Local to global rotation angle in degrees
+    n_elem::Int               # Number of elements in the support
+    EA::Float64
+    EI::Float64
+    L::Float64
+    bc_bottom::Vector{Int}    # Boundary conditions at bottom of support (DOF types)
+end
+
+function rotated_stiffness(support::SupportElement)
+    ke_local = frame_elem_stiffness(support.EA, support.EI, support.L)
+    Te = transformation_matrix(support.angle)
+    ke_global = Te' * ke_local * Te
+    return ke_global, support.dofs
+end
+
+function assemble_local_support(support::SupportElement)
+    n_nodes = support.n_elem + 1
+    n_dofs = 3 * n_nodes
+    dx = support.L / support.n_elem
+    
+    K_local = zeros(n_dofs, n_dofs)
+    
+    # Assemble support elements
+    for e = 1:support.n_elem
+        ke = frame_elem_stiffness(support.EA, support.EI, dx)
+        # DOFs for element e: nodes e and e+1
+        dofs = [3*(e-1)+1, 3*(e-1)+2, 3*(e-1)+3, 3*e+1, 3*e+2, 3*e+3]
+        K_local[dofs, dofs] .+= ke
+    end
+    
+    # Apply boundary conditions at bottom (node 1)
+    for dof_type in support.bc_bottom
+        dof_idx = dof_type  # Bottom node is node 1, so DOFs are 1,2,3
+        K_local[:, dof_idx] .= 0.0
+        K_local[dof_idx, :] .= 0.0
+        K_local[dof_idx, dof_idx] = 1.0
+    end
+    
+    return K_local
+end
+
+function create_support_dof_mapping(bo::BridgeOptions, supports::Vector{SupportElement})
+    # Start numbering support DOFs after main bridge DOFs
+    global_dof_offset = bo.n_dofs
+    support_dof_maps = Vector{Vector{Int}}()
+    
+    for (i, support) in enumerate(supports)
+        n_support_nodes = support.n_elem + 1
+        n_support_dofs = 3 * n_support_nodes
+        
+        # Map local support DOFs to global DOFs
+        local_to_global = collect(global_dof_offset+1:global_dof_offset+n_support_dofs)
+        
+        # The top node of support connects to bridge
+        # Replace top node DOFs with connection DOFs from bridge
+        bridge_connection_dofs = 3 * (support.connection_node - 1) .+ support.connection_dofs
+        
+        # Calculate top node DOF indices correctly
+        top_node_idx = n_support_nodes  # Last node (1-indexed)
+        top_node_dofs = 3 * (top_node_idx - 1) .+ [1, 2, 3]  # All 3 DOFs of top node
+        
+        # Replace only the connected DOFs
+        for (j, connection_dof) in enumerate(support.connection_dofs)
+            local_support_dof = top_node_dofs[connection_dof]  # Which DOF in support
+            global_bridge_dof = bridge_connection_dofs[j]      # Corresponding bridge DOF
+            local_to_global[local_support_dof] = global_bridge_dof
+        end
+        
+        push!(support_dof_maps, local_to_global)
+        
+        # Update offset: only count NEW DOFs (not the ones mapped to bridge)
+        global_dof_offset += n_support_dofs - length(support.connection_dofs)
+    end
+    
+    # Calculate total DOFs correctly: find the maximum DOF index used
+    all_dofs = vcat([bo.n_dofs], [maximum(map) for map in support_dof_maps]...)
+    total_dofs = maximum(all_dofs)
+
+    @show support_dof_maps
+    @show total_dofs
+    
+    return support_dof_maps, total_dofs
+end
+
+function assemble_matrices_with_supports(bo::BridgeOptions, supports::Vector{SupportElement}, T::Float64=20.0)
+    # Get DOF mappings
+    support_dof_maps, total_dofs = create_support_dof_mapping(bo, supports)
+    
+    # Initialize expanded matrices
+    M = spzeros(total_dofs, total_dofs)
+    K = spzeros(total_dofs, total_dofs)
+    
+    # Assemble main bridge (same as before, but into expanded matrices)
+    M_bridge, K_bridge = assemble_matrices(bo, T)
+    M[1:bo.n_dofs, 1:bo.n_dofs] .= M_bridge
+    K[1:bo.n_dofs, 1:bo.n_dofs] .= K_bridge
+    
+    # Assemble each support
+    for (i, support) in enumerate(supports)
+        # Get local support matrices
+        K_local = assemble_local_support(support)
+        
+        # Rotate to global coordinates
+        n_support_nodes = support.n_elem + 1
+        T_expanded = create_expanded_transformation(support.angle, n_support_nodes)
+        K_rotated = T_expanded' * K_local * T_expanded
+        
+        # Add mass matrix for support
+        M_local = create_support_mass_matrix(support, bo.ρ)
+        M_rotated = T_expanded' * M_local * T_expanded
+        
+        # Map to global DOFs
+        dof_map = support_dof_maps[i]
+        K[dof_map, dof_map] .+= K_rotated
+        M[dof_map, dof_map] .+= M_rotated
+    end
+    
+    return M, K
+end
+
+function create_expanded_transformation(angle::Float64, n_nodes::Int)
+    n_dofs = 3 * n_nodes
+    T_expanded = Matrix{Float64}(LinearAlgebra.I, n_dofs, n_dofs)
+    
+    T_single = transformation_matrix(angle)
+    
+    for node = 1:n_nodes
+        dof_start = 3 * (node - 1) + 1
+        dof_end = dof_start + 2
+        
+        # Apply 2D rotation to x,y DOFs (rotation DOF unchanged)
+        T_expanded[dof_start:dof_start+1, dof_start:dof_start+1] = T_single[1:2, 1:2]
+    end
+    
+    return T_expanded
+end
+
+function create_support_mass_matrix(support::SupportElement, ρ::Float64)
+    n_nodes = support.n_elem + 1
+    n_dofs = 3 * n_nodes
+    dx = support.L / support.n_elem
+    
+    M_local = spzeros(n_dofs, n_dofs)
+    
+    # Mass per node (same as main bridge)
+    m_trans = ρ * support.EA * dx / 2
+    m_rot = ρ * support.EA * dx^3 / 24
+    
+    for i in 1:n_nodes
+        base_idx = 3 * (i - 1)
+        M_local[base_idx + 1, base_idx + 1] = m_trans  # x
+        M_local[base_idx + 2, base_idx + 2] = m_trans  # y  
+        M_local[base_idx + 3, base_idx + 3] = m_rot    # rotation
+    end
+    
+    return M_local
+end
+
+function assemble_and_decompose_with_supports(bo::BridgeOptions, supports::Vector{SupportElement}, Ts::Vector{Float64})
+    nTs = length(Ts)
+    @info "Assembling matrices with supports for $nTs temperatures"
+    mats = [assemble_matrices_with_supports(bo, supports, T) for T in Ts]
+    M = cat([mats[i][1] for i in 1:nTs]..., dims=3)
+    K = cat([mats[i][2] for i in 1:nTs]..., dims=3)
+
+    @info "Decomposing matrices"
+    λs, vectors = decompose_matrices(M, K)
+
+    keep_modes = λs[:,1] .< bo.cutoff_freq
+    λs = λs[keep_modes, :]
+    vectors = vectors[:, keep_modes, :]
+
+    return M, K, λs, vectors
+end
