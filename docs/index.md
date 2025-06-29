@@ -286,7 +286,7 @@ If you use this library in research, please cite:
 ```bibtex
 @software{bridgefem2025,
   title = {BridgeFEM.jl: Finite Element Analysis of Bridges with Temperature-Dependent Materials},
-  author = {Your Name},
+  author = {Jan Grashorn},
   year = {2025},
   url = {https://github.com/jgrashorn/BridgeFEM.jl},
   doi = {10.5281/zenodo.XXXXXXX}

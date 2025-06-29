@@ -49,8 +49,8 @@
         startup: {
           ready: () => {
             MathJax.startup.defaultReady();
-            // Custom styling for dark mode
-            MathJax.startup.document.addStyleSheet();
+            // Apply dark mode styles to MathJax
+            updateMathJaxColors();
           }
         }
       };
@@ -129,6 +129,43 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     
     <script>
+      // Function to update MathJax colors based on theme
+      function updateMathJaxColors() {
+        if (window.MathJax && MathJax.startup.document) {
+          const isDark = document.body.classList.contains('dark-mode');
+          const color = isDark ? '#e6e6e6' : '#333333';
+          
+          // Update SVG text elements
+          const mathElements = document.querySelectorAll('.MathJax svg text');
+          mathElements.forEach(element => {
+            element.style.fill = color;
+          });
+          
+          // Also update any future math elements
+          const style = document.createElement('style');
+          style.innerHTML = `
+            .MathJax svg text {
+              fill: ${color} !important;
+            }
+            .MathJax svg [data-mml-node="mo"],
+            .MathJax svg [data-mml-node="mi"],
+            .MathJax svg [data-mml-node="mn"],
+            .MathJax svg [data-mml-node="mtext"] {
+              fill: ${color} !important;
+            }
+          `;
+          
+          // Remove previous style if exists
+          const existingStyle = document.getElementById('mathjax-theme-style');
+          if (existingStyle) {
+            existingStyle.remove();
+          }
+          
+          style.id = 'mathjax-theme-style';
+          document.head.appendChild(style);
+        }
+      }
+
       // Initialize Table of Contents
       if (document.querySelector('.js-toc')) {
         tocbot.init({
@@ -161,6 +198,9 @@
       if (currentTheme === 'dark' || (!currentTheme && prefersDarkScheme.matches)) {
         body.classList.add('dark-mode');
       }
+      
+      // Update MathJax colors on initial load
+      setTimeout(updateMathJaxColors, 500);
 
       themeToggleBtn.addEventListener('click', function() {
         body.classList.toggle('dark-mode');
@@ -172,11 +212,8 @@
         
         localStorage.setItem('theme', theme);
         
-        // Update MathJax colors if equations are present
-        if (window.MathJax) {
-          MathJax.typesetClear();
-          MathJax.typesetPromise();
-        }
+        // Update MathJax colors for new theme
+        setTimeout(updateMathJaxColors, 100);
       });
 
       // Listen for system theme changes
@@ -187,6 +224,8 @@
           } else {
             body.classList.remove('dark-mode');
           }
+          // Update MathJax colors when system theme changes
+          setTimeout(updateMathJaxColors, 100);
         }
       });
 
