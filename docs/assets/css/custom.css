@@ -283,13 +283,40 @@ blockquote p {
   color: var(--text-color) !important;
 }
 
-/* Dark mode MathJax adjustments */
-body.dark-mode .MathJax svg {
-  filter: invert(1) hue-rotate(180deg);
+/* Ensure MathJax SVG elements use correct colors */
+.MathJax svg text {
+  fill: var(--text-color) !important;
 }
 
-body.dark-mode .MathJax svg text {
+.MathJax svg [data-mml-node="mo"],
+.MathJax svg [data-mml-node="mi"], 
+.MathJax svg [data-mml-node="mn"],
+.MathJax svg [data-mml-node="mtext"] {
   fill: var(--text-color) !important;
+}
+
+/* Dark mode specific MathJax adjustments */
+body.dark-mode .MathJax svg text {
+  fill: #e6e6e6 !important;
+}
+
+body.dark-mode .MathJax svg [data-mml-node="mo"],
+body.dark-mode .MathJax svg [data-mml-node="mi"],
+body.dark-mode .MathJax svg [data-mml-node="mn"],
+body.dark-mode .MathJax svg [data-mml-node="mtext"] {
+  fill: #e6e6e6 !important;
+}
+
+/* Light mode specific MathJax adjustments */
+body:not(.dark-mode) .MathJax svg text {
+  fill: #333333 !important;
+}
+
+body:not(.dark-mode) .MathJax svg [data-mml-node="mo"],
+body:not(.dark-mode) .MathJax svg [data-mml-node="mi"],
+body:not(.dark-mode) .MathJax svg [data-mml-node="mn"],
+body:not(.dark-mode) .MathJax svg [data-mml-node="mtext"] {
+  fill: #333333 !important;
 }
 
 /* Display math centering */
