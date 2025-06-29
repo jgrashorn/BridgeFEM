@@ -1,3 +1,60 @@
+"""
+    plot_bridge_with_supports(bridge, supports; mode_shape=nothing, scale_factor=1.0, T=20.0, title="Bridge Structure", show_nodes=true)
+
+Visualize bridge structure with support elements, optionally showing deformed mode shapes.
+
+Creates a 2D plot of the bridge and its supports with optional modal deformation visualization.
+Supports arbitrary support orientations and accounts for temperature-dependent deformations.
+
+# Arguments
+- `bridge::BridgeOptions`: Main bridge structure definition
+- `supports::Vector{SupportElement}`: Array of support elements (piers, cables, etc.)
+
+# Keyword Arguments
+- `mode_shape::Vector{Float64}=nothing`: Modal displacement vector to visualize
+- `scale_factor::Float64=1.0`: Scaling factor for mode shape visualization
+- `T::Float64=20.0`: Temperature for support geometry calculation
+- `title::String="Bridge Structure"`: Plot title
+- `show_nodes::Bool=true`: Whether to show node markers
+
+# Returns
+- `Plot`: Plots.jl plot object
+
+# Visualization Features
+- Bridge deck shown as blue line with optional node markers
+- Support elements in red with angle-dependent geometry
+- Mode shape deformation overlaid on undeformed geometry
+- Equal aspect ratio for accurate geometric representation
+- Support base fixity indicators
+
+# Mode Shape Visualization
+When `mode_shape` is provided:
+- Bridge nodes are displaced by scaled modal displacements
+- Support deformation follows global DOF mapping
+- Deformation is added to undeformed geometry for clarity
+
+# Example
+```julia
+# Visualize first bending mode at 50°C
+bridge = BridgeOptions(50, bc, 300.0, 7800.0, 4.0, 3.0, E_data, 50.0)
+pier = SupportElement(26, [1,2,3], -90.0, 5, 0.5, 0.02, E_data, 50.0, [1,2,3])
+
+plot_bridge_with_supports(bridge, [pier], 
+                         mode_shape=mode_shapes[:, 1, 3], 
+                         scale_factor=50.0, 
+                         T=50.0,
+                         title="First Mode at 50°C")
+```
+
+# Notes
+- Coordinate system: x=horizontal (along bridge), y=vertical
+- Support angles: 0°=horizontal right, -90°=vertical down
+- Temperature affects support geometry for thermal analysis
+
+# See Also
+- [`animate_dynamic_response`](@ref): Time-domain animation
+- [`create_support_dof_mapping`](@ref): DOF connectivity
+"""
 function plot_bridge_with_supports(bo::BridgeOptions, supports::Vector{SupportElement}; 
                                  mode_shape=nothing, scale_factor=1.0, T=20.0,
                                  title="Bridge Structure", show_nodes=true)

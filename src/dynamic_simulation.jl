@@ -1,3 +1,36 @@
+"""
+    beam_modal_ode!(du, u, p, t)
+
+Modal space ordinary differential equation for bridge dynamics with temperature-dependent properties.
+
+This function implements the second-order modal equations of motion:
+```
+q̈ᵢ + 2ζᵢωᵢq̇ᵢ + ωᵢ²qᵢ = Φᵢᵀf(t)
+```
+
+# Arguments
+- `du::Vector`: Derivative vector to be filled [q̇; q̈]
+- `u::Vector`: State vector [q; q̇] where q are modal displacements
+- `p::NamedTuple`: Parameters containing:
+  - `T_func`: Temperature function T(t)
+  - `n_modes`: Number of retained modes
+  - `ω_interp`: Natural frequency interpolation function
+  - `ζ`: Vector of damping ratios per mode
+  - `Φ_interp`: Mode shape interpolation function
+  - `load_vector`: External loading function f(t, dofs)
+  - `n_dofs`: Total number of DOFs
+- `t::Float64`: Current time
+
+# Implementation Details
+- Natural frequencies are interpolated based on current temperature
+- Mode shapes are interpolated for accurate force projection
+- Damping is assumed proportional (modal damping ratios)
+- Compatible with DifferentialEquations.jl solvers
+
+# See Also
+- [`solve_dynamics`](@ref): High-level dynamic simulation interface
+- [`decompose_matrices`](@ref): Modal decomposition preparation
+"""
 function beam_modal_ode!(du, u, p, t)
     T = p.T_func(t)
     q     = u[1:p.n_modes]        # modal displacements

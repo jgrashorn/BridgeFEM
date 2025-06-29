@@ -5,6 +5,16 @@ using JSON
 using Arpack
 using Dates
 
+"""
+Dictionary mapping boundary condition type strings to DOF indices.
+
+# Available constraint types:
+- `"all"`: [1,2,3] - All DOFs (x, y, rotation)
+- `"trans"`: [1,2] - Both translational DOFs
+- `"x"`: 1 - X-direction translational DOF
+- `"y"`: 2 - Y-direction translational DOF
+- `"ϕ"`: 3 - Rotational DOF
+"""
 BCTypes = Dict(
     "all" => [1,2,3], # All DOFs (x, y, rotation)
     "trans" => [1,2], # Both translational DOFs
@@ -13,6 +23,36 @@ BCTypes = Dict(
     "ϕ" => 3,    # Rotational DOF
 )
 
+"""
+    BridgeBC(conditions)
+
+Boundary condition specification for bridge nodes.
+
+# Arguments
+- `conditions::Vector{Vector{Any}}`: List of boundary conditions, where each condition is 
+  `[node_number, constraint_type]`
+
+# Constraint types
+Can use either string identifiers or explicit DOF vectors:
+- String: `"all"`, `"trans"`, `"x"`, `"y"`, `"ϕ"` (see `BCTypes`)
+- Vector: `[1, 2, 3]` for explicit DOF specification
+
+# Examples
+```julia
+# Using string identifiers
+bc = BridgeBC([
+    [1, "all"],      # Fix all DOFs at node 1
+    [10, "trans"],   # Fix translations at node 10
+    [20, "y"]        # Fix y-translation at node 20
+])
+
+# Using explicit DOF vectors
+bc = BridgeBC([
+    [1, [1,2,3]],    # Fix all DOFs at node 1
+    [5, [2]]         # Fix y-translation at node 5
+])
+```
+"""
 struct BridgeBC
     conds::Vector{Vector{Any}}
 
@@ -26,6 +66,39 @@ struct BridgeBC
     end
 end
 
+"""
+    BridgeOptions(n_elem, bc_nodes, L, ρ, A, I, E_T, cutoff_freq)
+
+Main structure defining a bridge finite element model.
+
+# Arguments
+- `n_elem::Int`: Number of finite elements
+- `bc_nodes::BridgeBC`: Boundary conditions
+- `L::Float64`: Bridge length (m)
+- `ρ::Float64`: Material density (kg/m³)
+- `A::Float64`: Cross-sectional area (m²)
+- `I::Float64`: Moment of inertia (m⁴)
+- `E_T::Matrix{Float64}`: Temperature-Young's modulus data [T E; ...]
+- `cutoff_freq::Float64`: Maximum frequency for modal analysis (Hz)
+
+# Fields
+- `n_nodes::Int`: Number of nodes (computed as n_elem + 1)
+- `n_dofs::Int`: Number of degrees of freedom (3 per node)
+- `E::Function`: Young's modulus interpolation function E(T)
+
+# Examples
+```julia
+# Temperature-dependent steel bridge
+E_data = [
+    -10.0  250e9;   # E at -10°C
+     20.0  207e9;   # E at 20°C  
+     50.0  150e9    # E at 50°C
+]
+
+bc = BridgeBC([[1, "all"], [51, "y"]])
+bridge = BridgeOptions(50, bc, 300.0, 7800.0, 4.0, 3.0, E_data, 50.0)
+```
+"""
 mutable struct BridgeOptions
     n_elem::Int # Number of finite elements
     n_nodes::Int # Number of nodes
@@ -80,6 +153,46 @@ function dict_to_bridge_options(dict::Dict)
     )
 end
 
+"""
+    SupportElement(connection_node, connection_dofs, angle, n_elem, A, I, E_T, L, bc_bottom)
+
+Auxiliary support structure (pier, cable, etc.) connected to the main bridge.
+
+# Arguments
+- `connection_node::Int`: Bridge node to connect to
+- `connection_dofs::Vector{Int}`: DOFs to connect [1,2,3] = [x,y,θ]
+- `angle::Float64`: Orientation angle in degrees (0° = horizontal right, -90° = vertical down)
+- `n_elem::Int`: Number of elements in support
+- `A::Float64`: Cross-sectional area (m²)
+- `I::Float64`: Moment of inertia (m⁴)
+- `E_T::Matrix{Float64}`: Temperature-dependent Young's modulus data
+- `L::Float64`: Support length (m)
+- `bc_bottom::Vector{Int}`: Constrained DOFs at support base
+
+# Coordinate System
+- **Local coordinates**: Support extends from (0,0) to (L,0) horizontally
+- **Global coordinates**: Rotated by `angle` and connected to bridge
+- **Connection**: First node connects to bridge, last node is constrained
+
+# Examples
+```julia
+# Vertical pier with temperature dependence
+pier = SupportElement(
+    26,              # Connect to node 26
+    [1, 2, 3],       # Connect all DOFs  
+    -90.0,           # Vertical downward
+    5,               # 5 elements
+    0.5,             # Cross-sectional area
+    0.02,            # Moment of inertia
+    E_data,          # Same temperature dependence as bridge
+    50.0,            # 50m height
+    [1, 2, 3]        # Fix all DOFs at base
+)
+
+# Pinned support (forces only, no moments)
+pin = SupportElement(5, [1, 2], -90.0, 3, 0.2, 0.01, E_data, 20.0, [1, 2])
+```
+"""
 mutable struct SupportElement
     connection_node::Int        # Node on main bridge this support connects to
     connection_dofs::Vector{Int} # Specific DOFs to connect (e.g., [1,2] for x,y only)
@@ -205,7 +318,43 @@ function save_simulation_options(opts::SimulationOptions, filename::String)
     @info "Simulation options saved to: $filename"
 end
 
-# Element stiffness matrix for 2D frame element (3 DOFs per node: u, v, theta)
+"""
+    frame_elem_stiffness(EA, EI, L_e)
+
+Compute element stiffness matrix for 2D frame element.
+
+Returns the 6×6 local stiffness matrix for a frame element with 3 DOFs per node:
+- DOFs 1,4: Axial (u₁, u₂)
+- DOFs 2,5: Transverse (v₁, v₂)  
+- DOFs 3,6: Rotation (θ₁, θ₂)
+
+# Arguments
+- `EA::Float64`: Axial stiffness (Young's modulus × area)
+- `EI::Float64`: Flexural stiffness (Young's modulus × moment of inertia)
+- `L_e::Float64`: Element length
+
+# Returns
+- `k::Matrix{Float64}`: 6×6 element stiffness matrix
+
+# Stiffness Matrix Form
+```
+k = [EA/L    0      0     -EA/L    0      0   ]
+    [0    12EI/L³  6EI/L²    0   -12EI/L³ 6EI/L²]
+    [0     6EI/L²  4EI/L     0    -6EI/L² 2EI/L ]
+    [-EA/L   0      0      EA/L    0      0   ]
+    [0   -12EI/L³ -6EI/L²    0    12EI/L³ -6EI/L²]
+    [0     6EI/L²  2EI/L     0    -6EI/L² 4EI/L ]
+```
+
+# Theory
+Based on Euler-Bernoulli beam theory with:
+- Linear axial deformation: u(x) = N₁u₁ + N₂u₂
+- Cubic transverse deformation: v(x) = H₁v₁ + H₂θ₁ + H₃v₂ + H₄θ₂
+
+# See Also
+- [`frame_elem_mass`](@ref): Corresponding mass matrix
+- [`assemble_stiffness!`](@ref): Global assembly process
+"""
 function frame_elem_stiffness(EA, EI, L_e)
     c1 = EA / L_e
     c2 = 12.0 * EI / L_e^3
@@ -224,9 +373,48 @@ function frame_elem_stiffness(EA, EI, L_e)
     return k
 end
 
+"""
+    frame_elem_mass(ρ, A, L)
+
+Compute consistent mass matrix for 2D frame element.
+
+Returns the 6×6 consistent mass matrix based on the same shape functions used 
+for stiffness. Includes both translational and rotational inertia effects.
+
+# Arguments
+- `ρ::Float64`: Material density (kg/m³)
+- `A::Float64`: Cross-sectional area (m²)
+- `L::Float64`: Element length (m)
+
+# Returns  
+- `M::Matrix{Float64}`: 6×6 element mass matrix
+
+# Mass Matrix Form
+```
+M = (ρAL/420) × [140  0   0   70   0    0  ]
+                [0   156 22L  0   54  -13L]
+                [0   22L 4L²  0   13L -3L²]
+                [70   0   0  140   0    0  ]
+                [0   54  13L  0  156  -22L]
+                [0  -13L -3L² 0  -22L  4L²]
+```
+
+# Theory
+- Consistent mass from Hermite interpolation functions
+- Couples translational and rotational DOFs
+- More accurate than lumped mass for dynamic analysis
+- Preserves total mass: ∫ M dx = ρAL
+
+# Notes
+- Returns dense matrix (all entries generally non-zero)
+- Rotational inertia terms scaled by L² factors
+- Coupling terms (22L, 13L, etc.) ensure consistency
+
+# See Also
+- [`frame_elem_stiffness`](@ref): Corresponding stiffness matrix
+- [`assemble_matrices`](@ref): Global mass assembly
+"""
 function frame_elem_mass(ρ::Float64, A::Float64, L::Float64)
-    # Consistent mass matrix for 2D frame element
-    # This is a standard result from FEM textbooks
     mass_factor = ρ * A * L / 420.0
     
     M = mass_factor * [
@@ -271,6 +459,58 @@ function assemble_stiffness!(K, bo::BridgeOptions, EA, EI)
     return K
 end
 
+"""
+    assemble_matrices(bridge, T=20.0)
+
+Assemble global mass and stiffness matrices for bridge at given temperature.
+
+Constructs the finite element system matrices including temperature-dependent 
+material properties and applies boundary conditions.
+
+# Arguments
+- `bridge::BridgeOptions`: Bridge model parameters
+- `T::Float64=20.0`: Temperature in °C for material property evaluation
+
+# Returns
+- `M::SparseMatrixCSC{Float64}`: Global mass matrix [n_dofs × n_dofs]
+- `K::SparseMatrixCSC{Float64}`: Global stiffness matrix [n_dofs × n_dofs]
+
+# Assembly Process
+1. **Initialize**: Create sparse zero matrices of size n_dofs × n_dofs
+2. **Mass assembly**: Lumped mass approximation per node
+   - Translational: m = ρA(dx/2) for each node
+   - Rotational: I = ρA(dx³/24) for slender beam assumption
+3. **Stiffness assembly**: Loop over elements and assemble element matrices
+   - Material stiffness: EA(T) = E(T) × A, EI(T) = E(T) × I
+   - Element connectivity: nodes i and i+1 → DOFs [3i-2:3i, 3i+1:3i+3]
+4. **Boundary conditions**: Apply kinematic constraints from `bridge.bc_nodes`
+
+# Temperature Effects
+- Young's modulus E(T) evaluated via interpolation function
+- Both axial (EA) and flexural (EI) stiffness scale with temperature
+- Mass matrix unaffected by temperature
+
+# Boundary Condition Application
+For each constrained DOF:
+- Set corresponding row/column in K to zero
+- Set diagonal term to 1.0
+- Zero out mass matrix diagonal term
+
+# Example
+```julia
+bridge = BridgeOptions(50, bc, 300.0, 7800.0, 4.0, 3.0, E_data, 50.0)
+M, K = assemble_matrices(bridge, 25.0)  # At 25°C
+
+# Check system properties
+println("System size: $(size(K))")
+println("Condition number: $(cond(Array(K)))")
+```
+
+# See Also
+- [`assemble_matrices_with_supports`](@ref): Extended version with support elements
+- [`apply_bc!`](@ref): Boundary condition enforcement
+- [`frame_elem_stiffness`](@ref), [`frame_elem_mass`](@ref): Element matrices
+"""
 function assemble_matrices(bo::BridgeOptions, T::Float64=20.0)
 
     # Discretization
@@ -382,6 +622,29 @@ function create_support_dof_mapping(bo::BridgeOptions, supports::Vector{SupportE
     return support_dof_maps, total_dofs
 end
 
+"""
+    assemble_matrices_with_supports(bridge, supports, T=20.0)
+
+Assemble expanded system matrices including bridge and support structures.
+
+# Arguments
+- `bridge::BridgeOptions`: Main bridge configuration
+- `supports::Vector{SupportElement}`: Support structures
+- `T::Float64`: Temperature (°C) for material properties
+
+# Returns
+- `M::SparseMatrixCSC`: Expanded global mass matrix
+- `K::SparseMatrixCSC`: Expanded global stiffness matrix
+
+# Method
+1. Creates DOF mapping between bridge and support systems
+2. Assembles bridge matrices in upper-left block
+3. For each support:
+   - Assembles local support matrices
+   - Rotates to global coordinates using transformation matrix
+   - Maps to expanded global DOF numbering
+   - Applies boundary conditions at support base
+"""
 function assemble_matrices_with_supports(bo::BridgeOptions, supports::Vector{SupportElement}, T::Float64=20.0)
     # Get DOF mappings
     support_dof_maps, total_dofs = create_support_dof_mapping(bo, supports)

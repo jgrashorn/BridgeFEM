@@ -1,0 +1,31 @@
+title: BridgeFEM.jl
+description: Julia library for finite element analysis of bridges with temperature-dependent materials
+theme: jekyll-theme-cayman
+markdown: kramdown
+highlighter: rouge
+
+plugins:
+  - jekyll-sitemap
+  - jekyll-feed
+  - jekyll-optional-front-matter
+
+navigation:
+  - title: Home
+    url: /
+  - title: Getting Started
+    url: /getting-started
+  - title: Theory
+    url: /theory
+  - title: API Reference
+    url: /api-reference
+  - title: Examples
+    url: /examples
+
+repository: yourusername/BridgeFEM.jl
+
+# Enable math rendering
+kramdown:
+  math_engine: mathjax
+  math_engine_opts:
+    preview: true
+    preview_as_code: false

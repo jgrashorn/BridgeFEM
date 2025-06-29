@@ -1,5 +1,41 @@
+"""
+    decompose_matrices(M, K)
 
+Perform eigenvalue decomposition of mass and stiffness matrices across temperature range.
 
+This function computes natural frequencies and mode shapes for each temperature state,
+ensuring mode shape consistency across temperatures using modal correlation.
+
+# Arguments
+- `M::Array{Float64,3}`: Mass matrices for each temperature [n_dof × n_dof × n_temps]
+- `K::Array{Float64,3}`: Stiffness matrices for each temperature [n_dof × n_dof × n_temps]
+
+# Returns
+- `ω_matrix::Matrix{Float64}`: Natural frequencies [n_modes × n_temps] in Hz
+- `Φ_tensor::Array{Float64,3}`: Mass-normalized mode shapes [n_dof × n_modes × n_temps]
+- `Φ_tensor_unnormalized::Array{Float64,3}`: Unnormalized mode shapes for reference
+
+# Algorithm
+1. Solve generalized eigenvalue problem Kφ = λMφ for each temperature
+2. Extract natural frequencies: ω = √λ/(2π)
+3. Normalize mode shapes to unit length
+4. Apply Modal Assurance Criterion (MAC) for mode tracking
+5. Mass-normalize final mode shapes: φᵀMφ = I
+
+# Mode Tracking
+Mode shapes are tracked across temperatures by comparing with previous temperature
+state using dot product correlation. Modes with negative correlation are flipped
+to maintain consistent modal coordinate definitions.
+
+# Notes
+- Returns both normalized and unnormalized mode shapes for flexibility
+- Natural frequencies are converted from rad/s to Hz
+- All n_dof modes are retained (no truncation at this stage)
+
+# See Also
+- [`assemble_and_decompose`](@ref): Complete assembly and decomposition workflow
+- [`Modal Assurance Criterion`](https://en.wikipedia.org/wiki/Modal_assurance_criterion)
+"""
 function decompose_matrices(M, K)
     # Collect mode shapes at different temperatures
     n_dof = size(M, 1)
