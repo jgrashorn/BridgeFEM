@@ -22,7 +22,7 @@ include("src/bridge_model.jl")
 include("src/model_reduction.jl") 
 include("src/dynamic_simulation.jl")
 include("src/utils.jl")
-include("src/oma.jl")
+# include("src/oma.jl")
 
 println("🏗️  BridgeFEM.jl - Complete Bridge Analysis Example")
 println("=" ^ 60)
@@ -41,7 +41,7 @@ E_data = [
 ]
 
 println("Temperature range: $(E_data[1,1])°C to $(E_data[end,1])°C")
-println("Young's modulus range: $(E_data[end,2]/1e9:.0f) - $(E_data[1,2]/1e9:.0f) GPa")
+println("Young's modulus range: $(E_data[end,2]/1e9:.0) - $(E_data[1,2]/1e9:.0) GPa")
 
 # 2. Create Bridge Model
 println("\n🌉 Step 2: Create bridge model")
@@ -118,7 +118,7 @@ frequencies, mode_shapes, mode_shapes_unnorm = decompose_matrices(M_all, K_all)
 
 # Display first few natural frequencies
 println("\nFirst 5 natural frequencies across temperatures:")
-println("Mode | " * join([" T=$T°C  " for T in temperatures], "|"))
+println("Mode | " * join([" T=$(T)°C  " for T in temperatures], "|"))
 println("-" ^ 50)
 for mode = 1:min(5, size(frequencies, 1))
     freq_str = join([sprintf("  %.2f   ", frequencies[mode, i]) for i in 1:length(temperatures)], "|")

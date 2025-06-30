@@ -47,7 +47,7 @@ se = [SupportElement(
         I_support,               # Moment of inertia
         E_support,          # Temperature-dependent Young's modulus
         L_support,               # Length
-        BCTypes["trans"]           # Fix all DOFs at bottom
+        BCTypes["all"]           # Fix all DOFs at bottom
     ),
     SupportElement(
         n_elem - (n_elem ÷ 3),          # Connect to middle of bridge
@@ -58,7 +58,7 @@ se = [SupportElement(
         I_support,               # Moment of inertia
         E_support,          # Temperature-dependent Young's modulus
         L_support,               # Length
-        BCTypes["trans"]           # Fix all DOFs at bottom
+        BCTypes["all"]           # Fix all DOFs at bottom
     )]
 
 # Example workflow with supports:
@@ -156,13 +156,13 @@ u, du = reconstruct_physical(sim_opts, q, Φ_T, T_func, sol.t)
 # # 1. Plot structure only
 # plot_bridge_with_supports(bo, supports)
 
-time_subsample = sol.t[1:2:end]
-u_subsample = u[:, 1:2:end]
-anim_fast = animate_dynamic_response(bo, supports, u_subsample, time_subsample,
-                                   scale_factor=100.0,
-                                   n_frames=500,
-                                   fps=24,
-                                   filename="bridge_fast_dynamics.gif")
+# time_subsample = sol.t
+# u_subsample = u
+# anim_fast = animate_dynamic_response(bo, supports, u_subsample, time_subsample,
+#                                    scale_factor=1000.0,
+#                                    n_frames=4000,
+#                                    fps=24,
+#                                    filename="bridge_dynamics.gif")
 
 # support_dof_maps, total_dofs = create_support_dof_mapping(bo, supports)
 

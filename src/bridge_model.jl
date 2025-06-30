@@ -232,18 +232,25 @@ struct SimulationOptions
     damping_ratio::Float64
     total_dofs::Int
     total_elements::Int
+    support_dof_mapping::Vector{Vector{Int}} # Maps support DOFs to global DOFs
     created_at::String
 end
 
 # Constructor for creating options before simulation
 function SimulationOptions(bridge::BridgeOptions, supports::Vector{SupportElement}, temperatures::Vector{Float64}; damping_ratio=0.02)
     # Compute system properties
-    _, total_dofs = create_support_dof_mapping(bridge, supports)
+    support_dof_mapping, total_dofs = create_support_dof_mapping(bridge, supports)
     total_elements = bridge.n_elem + sum(s.n_elem for s in supports)
     
     return SimulationOptions(
-        bridge, supports, temperatures, damping_ratio, total_dofs, total_elements, string(now())
+        bridge, supports, temperatures, damping_ratio, total_dofs, total_elements, support_dof_mapping, string(now())
     )
+end
+
+function SimulationOptions(bridge::BridgeOptions, supports::Vector{SupportElement}, temperatures::Vector{Float64}, damping_ratio::Float64, total_dofs::Int, total_elements::Int, created_at::String)
+
+    return SimulationOptions(bridge, supports, temperatures, damping_ratio, total_dofs, total_elements, support_dof_mapping, created_at)
+
 end
 
 function simulation_options_to_dict(opts::SimulationOptions)
@@ -502,8 +509,8 @@ bridge = BridgeOptions(50, bc, 300.0, 7800.0, 4.0, 3.0, E_data, 50.0)
 M, K = assemble_matrices(bridge, 25.0)  # At 25°C
 
 # Check system properties
-println("System size: $(size(K))")
-println("Condition number: $(cond(Array(K)))")
+println("System size: \$(size(K))")
+println("Condition number: \$(cond(Array(K)))")
 ```
 
 # See Also
@@ -620,6 +627,10 @@ function create_support_dof_mapping(bo::BridgeOptions, supports::Vector{SupportE
     
     total_dofs = global_dof_offset
     return support_dof_maps, total_dofs
+end
+
+function get_node_from_dof(so::SimulationOptions,dof::Int)
+
 end
 
 """
