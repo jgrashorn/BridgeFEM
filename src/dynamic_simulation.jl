@@ -58,3 +58,29 @@ function beam_modal_ode!(du, u, p, t)
     du[1:p.n_modes] .= qdot
     du[p.n_modes+1:end] .= qddot
 end
+
+function beam_physical_ode!(du, u, p, t)
+    # Unpack state vector
+    # u_ = u[1:p.n_dofs]        # modal displacements
+    # udot_ = u[p.n_dofs+1:end] # modal velocities
+
+    # Interpolate natural frequencies and mode shapes
+    M = p.M_interp(p.T_func(t))
+    ζ = p.ζ
+    K = p.K_interp(p.T_func(t))
+
+    # Assemble global load vector
+    @show f = p.load_vector(t, 1:p.n_dofs)
+
+    # Construct system matrix blocks
+    Z = zeros(p.n_dofs, p.n_dofs)
+    I = Matrix{Float64}(LinearAlgebra.I, p.n_dofs, p.n_dofs)
+    Minv = pinv(M)
+    D = 2 .* ζ .* sqrt.(diag(K) ./ diag(M)) # Rayleigh-like modal damping (if needed, adjust as appropriate)
+    Dmat = Diagonal(D)
+    @show A = [Z I; -Minv*K -Minv*Dmat]
+
+    b = [zeros(p.n_dofs); Minv*f]
+    du = A * u + b
+
+end

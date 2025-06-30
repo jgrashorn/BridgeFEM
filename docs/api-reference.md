@@ -426,40 +426,6 @@ Apply boundary conditions to mass and stiffness matrices (in-place).
 
 ---
 
-## Integration Functions
-
-### Manual Time Integration
-
-For performance-critical applications, manual integration functions are available:
-
-#### manual_rk4_integration
-
-```julia
-manual_rk4_integration(u0, tspan, dt, params) -> (t_vec, u_history)
-```
-
-4th-order Runge-Kutta integration with fixed time step.
-
-#### manual_crank_nicolson_integration
-
-```julia
-manual_crank_nicolson_integration(u0, tspan, dt, params) -> (t_vec, u_history)
-```
-
-Crank-Nicolson integration (unconditionally stable).
-
-**Arguments:**
-- `u0::Vector{Float64}`: Initial conditions
-- `tspan::Tuple{Float64,Float64}`: Time span `(t_start, t_end)`
-- `dt::Float64`: Time step
-- `params::NamedTuple`: System parameters (same as `beam_modal_ode!`)
-
-**Returns:**
-- `t_vec::Vector{Float64}`: Time vector
-- `u_history::Matrix{Float64}`: Solution history `[dof, time]`
-
----
-
 ## Loading Functions
 
 Common loading patterns for dynamic analysis:
@@ -533,8 +499,8 @@ E_steel = 207e9     # Pa at 20°C
 E_concrete = 30e9   # Pa at 20°C
 
 # Aluminum
-ρ_aluminum = 2700.0 # kg/m³  
-E_aluminum = 70e9   # Pa at 20°C
+ρ_aluminium = 2700.0 # kg/m³  
+E_aluminium = 70e9   # Pa at 20°C
 ```
 
 ---
