@@ -629,7 +629,50 @@ function create_support_dof_mapping(bo::BridgeOptions, supports::Vector{SupportE
     return support_dof_maps, total_dofs
 end
 
-function get_node_from_dof(so::SimulationOptions,dof::Int)
+function get_node_from_dof(so::SimulationOptions, dof::Int)
+
+    node = dof <= so.bridge.n_dofs ? dof ÷ 3 : begin
+        for support_map in so.support_dof_mapping
+            node = findfirst(==(dof),support_map)
+            if !isempty(node)
+                return so.bridge.n_elem + 1 + node
+            end
+        end
+    end
+
+    return node
+
+end
+
+function get_dof_from_node(so::SimulationOptions,node::Int)
+    # Get the DOF mapping for the given node
+    dof_map = node < so.bridge.n_dofs ? 3 * (node - 1) .+ [1, 2, 3] : begin
+        
+        # Check if node has support connections
+        for support in so.supports
+            if support.connection_node == node
+                dof_map = support.connection_dofs
+                return dof_map
+            end
+        end
+    end
+end
+
+function get_bc_dofs(so::SimulationOptions)
+
+    bc_dofs = Vector{Int}()
+
+    for bc_node in so.bridge.bc_nodes.conds
+        node = bc_node[1]
+        dofs = get_dof_from_node(so, node)
+        @show push!(bc_dofs, dofs[bc_node[2]]...)
+    end
+
+    for (i, support) in enumerate(so.supports)
+        @show push!(bc_dofs,so.support_dof_mapping[i][end-2:end]...)
+    end
+
+    return bc_dofs
 
 end
 
